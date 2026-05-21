@@ -1,0 +1,31 @@
+FINAL HYBRID AI REPORT
+======================================================================
+
+CATEGORY DISTRIBUTION
+AI_Category
+GOOD         512
+MODERATE     188
+POOR          66
+HAZARDOUS      2
+Name: count, dtype: int64
+
+AI SCORE STATISTICS
+count    768.00
+mean     102.96
+std       73.88
+min       42.20
+25%       45.80
+50%       53.35
+75%      183.80
+max      500.00
+Name: AI_Score, dtype: float64
+
+SOURCE WISE ANALYSIS
+Source   AI_Category
+indoor   GOOD           250
+         HAZARDOUS        2
+         MODERATE         1
+kitchen  MODERATE       187
+         POOR            66
+outdoor  GOOD           262
+Name: count, dtype: int64
