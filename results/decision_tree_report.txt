@@ -1,0 +1,25 @@
+DECISION TREE MODEL REPORT
+======================================================================
+
+Accuracy Score   : 0.9935
+Precision Score  : 0.9940
+Recall Score     : 0.9935
+F1 Score         : 0.9936
+CV Mean Accuracy : 0.9756
+CV Std Dev       : 0.0178
+
+CONFUSION MATRIX
+[[103   0   0]
+ [  0  37   1]
+ [  0   0  13]]
+
+CLASSIFICATION REPORT
+              precision    recall  f1-score   support
+
+        GOOD       1.00      1.00      1.00       103
+    MODERATE       1.00      0.97      0.99        38
+        POOR       0.93      1.00      0.96        13
+
+    accuracy                           0.99       154
+   macro avg       0.98      0.99      0.98       154
+weighted avg       0.99      0.99      0.99       154
