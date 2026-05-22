@@ -3,10 +3,12 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import requests,joblib,time,sys,os
+import requests,joblib,time,os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"..")))
-from src.config import MODELS_DIR,RESULTS_DIR
+BASE_DIR=os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+
+MODELS_DIR=os.path.join(BASE_DIR,"models")
+RESULTS_DIR=os.path.join(BASE_DIR,"results")
 
 st.set_page_config(page_title="AI Air Monitor",page_icon="🤖",layout="wide")
 
@@ -139,7 +141,7 @@ with c4:
 
 @st.cache_resource
 def load_model():
-    return joblib.load(f"{MODELS_DIR}/final_pipeline.pkl")
+    return joblib.load(os.path.join(MODELS_DIR,"final_pipeline.pkl"))
 
 pipeline=load_model()
 
@@ -148,7 +150,7 @@ iso_forest=pipeline['iso_forest']
 feature_cols=pipeline['feature_cols']
 
 try:
-    df_results=pd.read_csv(f"{RESULTS_DIR}/final_ai_scores.csv")
+    df_results=pd.read_csv(os.path.join(RESULTS_DIR,"final_ai_scores.csv"))
 except:
     df_results=pd.DataFrame()
 
