@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 import requests,joblib,time,os
 
 BASE_DIR=os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-
 MODELS_DIR=os.path.join(BASE_DIR,"models")
 RESULTS_DIR=os.path.join(BASE_DIR,"results")
 
@@ -29,8 +28,7 @@ color:white;
 }
 
 section[data-testid="stSidebar"]{
-background:rgba(15,23,42,0.92);
-backdrop-filter:blur(20px);
+background:rgba(15,23,42,0.95);
 border-right:1px solid rgba(0,255,255,0.2);
 }
 
@@ -125,16 +123,31 @@ ESP32 • Isolation Forest • Decision Tree • Real-Time AI Monitoring
 
 st.markdown("<br>",unsafe_allow_html=True)
 
+if "esp32_connected" not in st.session_state:
+    st.session_state.esp32_connected=False
+
 c1,c2,c3,c4=st.columns(4)
 
 with c1:
-    st.success("🟢 AI SYSTEM ACTIVE")
+
+    if st.session_state.esp32_connected:
+        st.success("🟢 AI SYSTEM ACTIVE")
+    else:
+        st.error("🔴 SYSTEM OFFLINE")
 
 with c2:
-    st.info("📡 ESP32 CONNECTED")
+
+    if st.session_state.esp32_connected:
+        st.success("📡 ESP32 CONNECTED")
+    else:
+        st.error("📡 ESP32 DISCONNECTED")
 
 with c3:
-    st.warning("⚡ REAL-TIME STREAM")
+
+    if st.session_state.esp32_connected:
+        st.success("⚡ LIVE DATA STREAM")
+    else:
+        st.warning("⚡ WAITING FOR DATA")
 
 with c4:
     st.metric("⏱ Last Update",time.strftime("%H:%M:%S"))
@@ -252,6 +265,8 @@ if page=="📡 Live Dashboard":
             )
 
             if response.status_code==200:
+
+                st.session_state.esp32_connected=True
 
                 data=response.json()
 
@@ -387,10 +402,16 @@ if page=="📡 Live Dashboard":
                     st.rerun()
 
             else:
+
+                st.session_state.esp32_connected=False
+
                 st.error("ESP32 Not Connected")
 
         except Exception as e:
-            st.error(f"{e}")
+
+            st.session_state.esp32_connected=False
+
+            st.error(f"Connection Failed : {e}")
 
 if page=="🧠 Manual Prediction":
 
@@ -430,38 +451,6 @@ if page=="🧠 Manual Prediction":
 
         </div>
         """,unsafe_allow_html=True)
-
-if page=="🔗 ESP32 Auto Fetch":
-
-    st.header("🔗 ESP32 Fetch")
-
-    esp_ip=st.text_input(
-    "ESP32 IP",
-    placeholder="192.168.1.100"
-    )
-
-    if st.button("📡 Fetch"):
-
-        try:
-
-            response=requests.get(
-            f"http://{esp_ip}/readings",
-            timeout=5
-            )
-
-            if response.status_code==200:
-
-                data=response.json()
-
-                st.success("🟢 ESP32 Connected")
-
-                st.json(data)
-
-            else:
-                st.error("🔴 ESP32 Offline")
-
-        except Exception as e:
-            st.error(f"{e}")
 
 if page=="📊 Charts & Analytics":
 
@@ -509,36 +498,6 @@ if page=="📊 Charts & Analytics":
     )
 
     st.plotly_chart(fig,use_container_width=True)
-
-    if not df_results.empty:
-
-        corr=df_results.corr(numeric_only=True)
-
-        fig2=px.imshow(
-        corr,
-        text_auto=True,
-        aspect="auto",
-        color_continuous_scale="Blues",
-        title="Correlation Heatmap"
-        )
-
-        st.plotly_chart(fig2,use_container_width=True)
-
-    cm=np.array([
-    [98,1,0,0],
-    [1,95,2,0],
-    [0,2,96,1],
-    [0,0,1,99]
-    ])
-
-    fig3=px.imshow(
-    cm,
-    text_auto=True,
-    color_continuous_scale="Blues",
-    title="Confusion Matrix"
-    )
-
-    st.plotly_chart(fig3,use_container_width=True)
 
 if page=="🕒 History":
 
