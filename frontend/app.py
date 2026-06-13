@@ -251,7 +251,13 @@ if page=="📡 Live Dashboard":
 
     st.header("📡 Live AI Dashboard")
 
-    esp_ip=st.text_input("ESP32 IP","192.168.1.xxx")
+    if "esp_ip" not in st.session_state:
+    st.session_state.esp_ip="192.168.1.5"
+
+    esp_ip=st.text_input(
+        "ESP32 IP",
+        st.session_state.esp_ip
+    )
 
     auto_refresh=st.toggle("Auto Refresh")
 
@@ -260,14 +266,15 @@ if page=="📡 Live Dashboard":
         try:
 
             response=requests.get(
-            f"http://{esp_ip}/readings",
-            timeout=3
+            f"http://{esp_ip.strip()}/readings",
+            timeout=10
             )
 
             if response.status_code==200:
 
                 st.session_state.esp32_connected=True
 
+                st.code(response.text)
                 data=response.json()
 
                 temp=data.get('temp',0)
@@ -375,14 +382,22 @@ if page=="📡 Live Dashboard":
                 else:
                     st.success("✅ Environment Stable")
 
-                st.session_state.history.append({
+                new_row={
+                "Time":time.strftime("%H:%M:%S"),
                 "Temperature":temp,
                 "Humidity":hum,
                 "AirQuality":air,
                 "Dust":dust,
                 "AI_Score":score,
                 "Category":category
-                })
+                }
+
+                if (
+                len(st.session_state.history)==0
+                or
+                st.session_state.history[-1]!=new_row
+                ):
+                    st.session_state.history.append(new_row)
 
                 history_df=pd.DataFrame(st.session_state.history)
 
@@ -538,7 +553,7 @@ st.markdown("""
 
 <center style="color:#94a3b8;">
 
-🤖 AI Smart Air Quality Monitoring System<br>
+AI Smart Air Quality Monitoring System<br>
 
 ESP32 + Isolation Forest + Decision Tree + Streamlit
 
