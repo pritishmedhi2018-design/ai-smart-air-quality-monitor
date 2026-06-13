@@ -1,30 +1,15 @@
-import sys
-import os
-
-ROOT_DIR=os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        ".."
-    )
-)
-
-sys.path.insert(0,ROOT_DIR)
-
-from backend.model_loader import load_model
-from backend.predictor import predict_air_quality
-from backend.esp_fetch import fetch_esp32_data
-from backend.charts import *
-from backend.metrics import display_metrics
-
-# ==========================================================
-# PAGE CONFIG
-# ==========================================================
-
 st.set_page_config(
     page_title="AI Air Monitor",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+st.title("AI-Based Smart Air Quality Monitoring System")
+st.caption("ESP32 | Machine Learning | Real-Time Analysis")
+
+# ==========================================================
+# PAGE CONFIG
+# ==========================================================
 
 st.title("AI-Based Smart Air Quality Monitoring System")
 st.caption("ESP32 | Machine Learning | Real-Time Analysis")
