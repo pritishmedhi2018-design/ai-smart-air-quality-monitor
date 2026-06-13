@@ -252,7 +252,7 @@ if page=="📡 Live Dashboard":
     st.header("📡 Live AI Dashboard")
 
     if "esp_ip" not in st.session_state:
-    st.session_state.esp_ip="192.168.1.5"
+        st.session_state.esp_ip="192.168.1.5"
 
     esp_ip=st.text_input(
         "ESP32 IP",
