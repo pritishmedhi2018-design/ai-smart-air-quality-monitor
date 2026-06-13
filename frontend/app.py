@@ -1,388 +1,171 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import requests,joblib,time,os
+import time
 
-BASE_DIR=os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-MODELS_DIR=os.path.join(BASE_DIR,"models")
-RESULTS_DIR=os.path.join(BASE_DIR,"results")
+from backend.model_loader import load_model
+from backend.predictor import predict_air_quality
+from backend.esp_fetch import fetch_esp32_data
+from backend.charts import *
+from backend.metrics import display_metrics
 
-st.set_page_config(page_title="AI Air Monitor",page_icon="🤖",layout="wide")
+# ==========================================================
+# PAGE CONFIG
+# ==========================================================
 
-st.markdown("""
-<style>
+st.set_page_config(
+    page_title="AI Air Monitor",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&display=swap');
+st.title("AI-Based Smart Air Quality Monitoring System")
+st.caption("ESP32 | Machine Learning | Real-Time Analysis")
 
-html,body,[class*="css"]{
-font-family:'Orbitron',sans-serif;
-}
-
-.stApp{
-background:
-radial-gradient(circle at top left,#0f172a,#020617 45%),
-linear-gradient(135deg,#020617,#0f172a,#111827);
-color:white;
-}
-
-section[data-testid="stSidebar"]{
-background:rgba(15,23,42,0.95);
-border-right:1px solid rgba(0,255,255,0.2);
-}
-
-.glass{
-background:rgba(255,255,255,0.05);
-border:1px solid rgba(255,255,255,0.08);
-border-radius:24px;
-padding:20px;
-backdrop-filter:blur(18px);
-box-shadow:0 0 25px rgba(0,255,255,0.08);
-}
-
-.main-title{
-text-align:center;
-font-size:55px;
-font-weight:700;
-background:linear-gradient(90deg,#00E5FF,#38BDF8,#7B61FF);
--webkit-background-clip:text;
--webkit-text-fill-color:transparent;
-}
-
-.metric-card{
-background:rgba(15,23,42,0.85);
-border:1px solid rgba(0,255,255,0.2);
-border-radius:22px;
-padding:18px;
-text-align:center;
-transition:0.3s ease;
-}
-
-.metric-card:hover{
-transform:translateY(-4px);
-box-shadow:0 0 25px rgba(0,255,255,0.25);
-}
-
-.metric-value{
-font-size:34px;
-font-weight:bold;
-color:#00E5FF;
-}
-
-.metric-label{
-color:#cbd5e1;
-font-size:15px;
-}
-
-.stButton>button{
-width:100%;
-border:none;
-border-radius:14px;
-height:52px;
-background:linear-gradient(90deg,#00E5FF,#2563EB);
-color:white;
-font-weight:bold;
-font-size:16px;
-}
-
-.stButton>button:hover{
-box-shadow:0 0 25px #00E5FF;
-}
-
-.alert-box{
-padding:18px;
-border-radius:16px;
-background:rgba(239,68,68,0.15);
-border:1px solid rgba(239,68,68,0.4);
-color:#fecaca;
-}
-
-</style>
-""",unsafe_allow_html=True)
-
-st.markdown("""
-<div class="glass">
-
-<div class="main-title">
-🤖 AI SMART AIR QUALITY MONITOR
-</div>
-
-<div style="
-text-align:center;
-font-size:18px;
-color:#94a3b8;
-margin-top:12px;
-letter-spacing:1px;
-">
-ESP32 • Isolation Forest • Decision Tree • Real-Time AI Monitoring
-</div>
-
-</div>
-""",unsafe_allow_html=True)
-
-st.markdown("<br>",unsafe_allow_html=True)
-
-if "esp32_connected" not in st.session_state:
-    st.session_state.esp32_connected=False
-
-c1,c2,c3,c4=st.columns(4)
-
-with c1:
-
-    if st.session_state.esp32_connected:
-        st.success("🟢 AI SYSTEM ACTIVE")
-    else:
-        st.error("🔴 SYSTEM OFFLINE")
-
-with c2:
-
-    if st.session_state.esp32_connected:
-        st.success("📡 ESP32 CONNECTED")
-    else:
-        st.error("📡 ESP32 DISCONNECTED")
-
-with c3:
-
-    if st.session_state.esp32_connected:
-        st.success("⚡ LIVE DATA STREAM")
-    else:
-        st.warning("⚡ WAITING FOR DATA")
-
-with c4:
-    st.metric("⏱ Last Update",time.strftime("%H:%M:%S"))
-
-@st.cache_resource
-def load_model():
-    return joblib.load(os.path.join(MODELS_DIR,"final_pipeline.pkl"))
-
-pipeline=load_model()
-
-scaler=pipeline['scaler']
-iso_forest=pipeline['iso_forest']
-feature_cols=pipeline['feature_cols']
-
-try:
-    df_results=pd.read_csv(os.path.join(RESULTS_DIR,"final_ai_scores.csv"))
-except:
-    df_results=pd.DataFrame()
+# ==========================================================
+# SESSION STATES
+# ==========================================================
 
 if "history" not in st.session_state:
     st.session_state.history=[]
 
-st.sidebar.title("⚙ CONTROL PANEL")
+if "esp32_connected" not in st.session_state:
+    st.session_state.esp32_connected=False
+
+if "sensor_data" not in st.session_state:
+    st.session_state.sensor_data=None
+
+# ==========================================================
+# LOAD MODEL
+# ==========================================================
+
+pipeline,scaler,iso_forest,feature_cols=load_model()
+
+# ==========================================================
+# SIDEBAR
+# ==========================================================
+
+st.sidebar.title("Control Panel")
 
 page=st.sidebar.radio(
-"Navigation",
-[
-"📡 Live Dashboard",
-"🧠 Manual Prediction",
-"🔗 ESP32 Auto Fetch",
-"📊 Charts & Analytics",
-"🕒 History"
-]
+    "Navigation",
+    [
+        "Live Dashboard",
+        "Manual Prediction",
+        "Analytics",
+        "History"
+    ]
 )
 
-refresh_rate=st.sidebar.slider("Refresh",1,10,3)
+refresh_rate=st.sidebar.slider(
+    "Refresh Interval (s)",
+    1,
+    10,
+    3
+)
 
-def sensor_card(title,value,unit,icon):
+# ==========================================================
+# STATUS BAR
+# ==========================================================
 
-    st.markdown(f"""
-    <div class="metric-card">
-    <div style="font-size:32px;">{icon}</div>
-    <div class="metric-value">{value}</div>
-    <div class="metric-label">{title} ({unit})</div>
-    </div>
-    """,unsafe_allow_html=True)
+c1,c2,c3=st.columns(3)
 
-def predict_air_quality(temp,humidity,air_quality,dust,source="indoor"):
-
-    input_df=pd.DataFrame([{
-    'Temperature':temp,
-    'Humidity':humidity,
-    'AirQuality':air_quality,
-    'Dust':dust,
-    'Temp_Hum_Index':temp*humidity/100,
-    'Air_Dust_Product':air_quality*dust,
-    'AirQuality_Log':np.log1p(air_quality),
-    'Dust_Log':np.log1p(dust),
-    'Air_Dust_Ratio':air_quality/(dust+1)
-    }])
-
-    X_scaled=scaler.transform(input_df[feature_cols])
-
-    anomaly=iso_forest.predict(X_scaled)[0]
-
-    norm_air=air_quality/2500
-    norm_dust=dust/250
-    norm_product=(air_quality*dust)/(2500*250)
-
-    kitchen_penalty=0.25 if source=="kitchen" else 0.0
-
-    weighted=(
-    norm_air*0.48+
-    norm_dust*0.22+
-    norm_product*0.15+
-    kitchen_penalty+
-    (1 if anomaly==-1 else 0)*0.08
-    )
-
-    ai_score=min(max((weighted**1.15*500),0),500)
-
-    if ai_score<=100:
-        category="GOOD"
-        color="#22c55e"
-
-    elif ai_score<=220:
-        category="MODERATE"
-        color="#06b6d4"
-
-    elif ai_score<=380:
-        category="POOR"
-        color="#f97316"
-
+with c1:
+    if st.session_state.esp32_connected:
+        st.success("ESP32 Connected")
     else:
-        category="HAZARDOUS"
-        color="#ef4444"
+        st.error("ESP32 Offline")
 
-    return ai_score,category,color,anomaly
+with c2:
+    st.info("ML Model Loaded")
 
-if page=="📡 Live Dashboard":
+with c3:
+    st.write(
+        "Last Update:",
+        time.strftime("%H:%M:%S")
+    )
+# ==========================================================
+# LIVE DASHBOARD
+# ==========================================================
 
-    st.header("📡 Live AI Dashboard")
+if page=="Live Dashboard":
 
-    if "esp_ip" not in st.session_state:
-        st.session_state.esp_ip="192.168.1.5"
-
-    esp_ip=st.text_input(
-        "ESP32 IP",
-        st.session_state.esp_ip
+    ip=st.text_input(
+        "ESP32 IP Address",
+        "192.168.1.5"
     )
 
-    auto_refresh=st.toggle("Auto Refresh")
+    auto_refresh=st.checkbox("Auto Refresh")
 
-    if st.button("🚀 Fetch Live Data") or auto_refresh:
+    if st.button("Fetch Data") or auto_refresh:
 
-        try:
+        data=fetch_esp32_data(ip)
 
-            response=requests.get(
-            f"http://{esp_ip.strip()}/readings",
-            timeout=10
+        if data:
+
+            st.session_state.sensor_data=data
+            st.session_state.esp32_connected=True
+
+        elif st.session_state.sensor_data:
+
+            st.warning("Using previous data")
+
+        else:
+
+            st.session_state.esp32_connected=False
+            st.error("ESP32 Offline")
+
+        if st.session_state.sensor_data:
+
+            temp=st.session_state.sensor_data["temp"]
+            hum=st.session_state.sensor_data["hum"]
+            air=st.session_state.sensor_data["air"]
+            dust=st.session_state.sensor_data["dust"]
+
+            score,category,color,anomaly=\
+            predict_air_quality(
+                temp,
+                hum,
+                air,
+                dust,
+                scaler,
+                iso_forest,
+                feature_cols
             )
 
-            if response.status_code==200:
+            c1,c2,c3,c4=st.columns(4)
 
-                st.session_state.esp32_connected=True
+            c1.metric(
+                "Temperature",
+                f"{temp:.1f} °C"
+            )
 
-                st.code(response.text)
-                data=response.json()
+            c2.metric(
+                "Humidity",
+                f"{hum:.1f} %"
+            )
 
-                temp=data.get('temp',0)
-                hum=data.get('hum',0)
-                air=data.get('air',0)
-                dust=data.get('dust',0)
+            c3.metric(
+                "Air Quality",
+                f"{air:.1f} ppm"
+            )
 
-                score,category,color,anomaly=predict_air_quality(
-                temp,hum,air,dust
-                )
+            c4.metric(
+                "Dust",
+                f"{dust:.1f} µg/m³"
+            )
 
-                c1,c2,c3,c4=st.columns(4)
+            st.plotly_chart(
+                gauge_chart(score,color),
+                width="stretch"
+            )
 
-                with c1:
-                    sensor_card("Temperature",f"{temp:.1f}","°C","🌡")
+            if anomaly==-1:
+                st.warning("Abnormal Pattern Detected")
 
-                with c2:
-                    sensor_card("Humidity",f"{hum:.1f}","%","💧")
+            st.success(category)
 
-                with c3:
-                    sensor_card("Air Quality",f"{air:.1f}","ppm","🌫")
+            st.session_state.history.append({
 
-                with c4:
-                    sensor_card("Dust",f"{dust:.1f}","µg/m³","🏭")
-
-                st.markdown("<br>",unsafe_allow_html=True)
-
-                left,right=st.columns([2,1])
-
-                with left:
-
-                    fig=go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=score,
-
-                    number={
-                    'font':{
-                    'size':50,
-                    'color':'cyan'
-                    }},
-
-                    title={
-                    'text':"AI SCORE",
-                    'font':{
-                    'size':28,
-                    'color':'white'
-                    }},
-
-                    gauge={
-                    'axis':{
-                    'range':[0,500]
-                    },
-
-                    'bar':{
-                    'color':color,
-                    'thickness':0.35
-                    },
-
-                    'bgcolor':"#111827",
-
-                    'steps':[
-                    {'range':[0,100],'color':'#22c55e'},
-                    {'range':[100,220],'color':'#06b6d4'},
-                    {'range':[220,380],'color':'#f97316'},
-                    {'range':[380,500],'color':'#ef4444'}
-                    ]
-                    }
-                    ))
-
-                    fig.update_layout(
-                    paper_bgcolor="#020617",
-                    font={'color':'white'},
-                    height=420
-                    )
-
-                    st.plotly_chart(fig,use_container_width=True)
-
-                with right:
-
-                    st.markdown(f"""
-                    <div class="glass">
-
-                    <h2 style="color:{color};text-align:center;">
-                    {category}
-                    </h2>
-
-                    <hr>
-
-                    <p>📡 ESP32 : CONNECTED</p>
-                    <p>🧠 AI MODEL : ACTIVE</p>
-                    <p>⚡ STREAM : LIVE</p>
-                    <p>⏱ TIME : {time.strftime("%H:%M:%S")}</p>
-
-                    </div>
-                    """,unsafe_allow_html=True)
-
-                if anomaly==-1:
-
-                    st.markdown("""
-                    <div class="alert-box">
-                    ⚠️ ANOMALY DETECTED
-                    </div>
-                    """,unsafe_allow_html=True)
-
-                else:
-                    st.success("✅ Environment Stable")
-
-                new_row={
                 "Time":time.strftime("%H:%M:%S"),
                 "Temperature":temp,
                 "Humidity":hum,
@@ -390,172 +173,165 @@ if page=="📡 Live Dashboard":
                 "Dust":dust,
                 "AI_Score":score,
                 "Category":category
-                }
 
-                if (
-                len(st.session_state.history)==0
-                or
-                st.session_state.history[-1]!=new_row
-                ):
-                    st.session_state.history.append(new_row)
+            })
 
-                history_df=pd.DataFrame(st.session_state.history)
+        if auto_refresh:
 
-                if len(history_df)>2:
+            time.sleep(refresh_rate)
+            st.rerun()
 
-                    fig2=px.line(
-                    history_df,
-                    y="AI_Score",
-                    title="📈 AI Trend",
-                    template="plotly_dark"
-                    )
 
-                    st.plotly_chart(fig2,use_container_width=True)
+# ==========================================================
+# MANUAL PREDICTION
+# ==========================================================
 
-                if auto_refresh:
-                    time.sleep(refresh_rate)
-                    st.rerun()
-
-            else:
-
-                st.session_state.esp32_connected=False
-
-                st.error("ESP32 Not Connected")
-
-        except Exception as e:
-
-            st.session_state.esp32_connected=False
-
-            st.error(f"Connection Failed : {e}")
-
-if page=="🧠 Manual Prediction":
-
-    st.header("🧠 Manual Prediction")
+if page=="Manual Prediction":
 
     c1,c2=st.columns(2)
 
     with c1:
-        temp=st.slider("Temperature",15.0,45.0,28.0)
-        humidity=st.slider("Humidity",20,100,70)
 
-    with c2:
-        air=st.number_input("Air Quality",0,5000,300)
-        dust=st.number_input("Dust",0,500,100)
-
-    source=st.selectbox(
-    "Environment",
-    ["indoor","outdoor","kitchen"]
-    )
-
-    if st.button("🚀 Predict"):
-
-        score,category,color,anomaly=predict_air_quality(
-        temp,humidity,air,dust,source
+        temp=st.slider(
+            "Temperature (°C)",
+            15.0,
+            45.0,
+            28.0
         )
 
-        st.markdown(f"""
-        <div class="glass">
+        hum=st.slider(
+            "Humidity (%)",
+            20,
+            100,
+            70
+        )
 
-        <h1 style="color:{color};text-align:center;">
-        {category}
-        </h1>
+    with c2:
 
-        <h2 style="text-align:center;color:cyan;">
-        AI Score : {score:.1f}/500
-        </h2>
+        air=st.number_input(
+            "Air Quality (ppm)",
+            0,
+            5000,
+            300
+        )
 
-        </div>
-        """,unsafe_allow_html=True)
+        dust=st.number_input(
+            "Dust Density (µg/m³)",
+            0,
+            500,
+            100
+        )
 
-if page=="📊 Charts & Analytics":
-
-    st.header("📊 AI Analytics")
-
-    m1,m2,m3=st.columns(3)
-
-    with m1:
-        st.metric("Accuracy","99.35%")
-
-    with m2:
-        st.metric("Precision","99.40%")
-
-    with m3:
-        st.metric("F1 Score","99.36%")
-
-    m4,m5,m6=st.columns(3)
-
-    with m4:
-        st.metric("Recall","99.35%")
-
-    with m5:
-        st.metric("CV Accuracy","97.56%")
-
-    with m6:
-        st.metric("Silhouette","0.2251")
-
-    feature_df=pd.DataFrame({
-    "Feature":[
-    "Air_Dust_Ratio",
-    "Air_Dust_Product",
-    "Temp_Hum_Index"
-    ],
-
-    "Importance":[0.42,0.33,0.25]
-    })
-
-    fig=px.bar(
-    feature_df,
-    x="Importance",
-    y="Feature",
-    orientation="h",
-    title="Feature Importance",
-    template="plotly_dark"
+    source=st.selectbox(
+        "Environment",
+        [
+            "indoor",
+            "outdoor",
+            "kitchen"
+        ]
     )
 
-    st.plotly_chart(fig,use_container_width=True)
+    if st.button("Predict"):
 
-if page=="🕒 History":
+        score,category,color,anomaly=\
+        predict_air_quality(
+            temp,
+            hum,
+            air,
+            dust,
+            scaler,
+            iso_forest,
+            feature_cols,
+            source
+        )
 
-    st.header("🕒 History")
+        st.plotly_chart(
+            gauge_chart(score,color),
+            width="stretch"
+        )
+
+        if anomaly==-1:
+            st.warning("Abnormal Pattern Detected")
+
+        st.success(category)
+# ==========================================================
+# ANALYTICS
+# ==========================================================
+
+if page=="Analytics":
+
+    st.subheader("Model Performance")
+
+    display_metrics(st)
+
+    st.subheader("Feature Importance")
+
+    st.plotly_chart(
+        feature_importance_chart(),
+        width="stretch"
+    )
+
+    st.subheader("Air Quality Distribution")
+
+    st.plotly_chart(
+        category_distribution_chart(),
+        width="stretch"
+    )
+
+
+# ==========================================================
+# HISTORY
+# ==========================================================
+
+if page=="History":
 
     if len(st.session_state.history)>0:
 
-        history_df=pd.DataFrame(st.session_state.history)
+        df=pd.DataFrame(
+            st.session_state.history
+        )
+
+        st.subheader("History")
 
         st.dataframe(
-        history_df,
-        use_container_width=True
+            df,
+            width="stretch"
         )
 
-        fig=px.line(
-        history_df,
-        y="AI_Score",
-        title="AI Trend",
-        template="plotly_dark"
+        st.subheader("AI Score Trend")
+
+        st.plotly_chart(
+            trend_chart(df),
+            width="stretch"
         )
 
-        st.plotly_chart(fig,use_container_width=True)
-
-        csv=history_df.to_csv(index=False)
+        csv=df.to_csv(index=False)
 
         st.download_button(
-        "⬇ Download CSV",
-        csv,
-        file_name="air_quality_history.csv",
-        mime="text/csv"
+            "Download CSV",
+            csv,
+            file_name="history.csv",
+            mime="text/csv"
         )
 
+        if st.button("Clear History"):
+
+            st.session_state.history=[]
+
+            st.rerun()
+
     else:
-        st.warning("No history available")
 
-st.markdown("""
-<hr>
+        st.info("No History Available")
 
-<center style="color:#94a3b8;">
 
-AI Smart Air Quality Monitoring System<br>
+# ==========================================================
+# FOOTER
+# ==========================================================
 
-ESP32 + Isolation Forest + Decision Tree + Streamlit
+st.markdown("---")
 
-</center>
-""",unsafe_allow_html=True)
+st.caption(
+    "AI-Based Smart Air Quality Monitoring System | "
+    "ESP32 • Machine Learning • Streamlit"
+)
